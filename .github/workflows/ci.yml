@@ -20,7 +20,7 @@ jobs:
           cache: 'npm'
 
       - name: Install frontend deps
-        run: npm ci
+        run: npm install
 
       - name: Frontend tests (Vitest)
         run: npm run test:ui
@@ -41,4 +41,3 @@ jobs:
 
       - name: Backend tests (Cargo)
         run: npm run test:rust
-
