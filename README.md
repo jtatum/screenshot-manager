@@ -1,6 +1,6 @@
 # Screenshot Manager (Tauri + React + TypeScript)
 
-[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+[![CI](https://github.com/jtautm/ssmanager/actions/workflows/ci.yml/badge.svg)](https://github.com/jtautm/ssmanager/actions/workflows/ci.yml)
 
 A desktop app built with Tauri 2, Vite, React, and TypeScript for managing screenshots on your machine.
 
@@ -61,8 +61,6 @@ npm run test:ui
 ```
 npm run test:rust
 ```
-
-Replace `OWNER/REPO` in the badge URL with your GitHub org/user and repository name (for example, `jtatum/ssmanager-gpt2`).
 
 ## Prerequisites
 
