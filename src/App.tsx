@@ -239,8 +239,8 @@ function App() {
 
       {items.length === 0 ? (
         <div style={{ marginTop: 16, padding: 32, borderRadius: 16, background: "white", boxShadow: "0 8px 32px rgba(0,0,0,0.08)" }}>
-          <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 18 }}>No screenshots found on your Desktop</div>
-          <div style={{ opacity: 0.7 }}>Make sure your macOS screenshot location is set to Desktop, or add some screenshots.</div>
+          <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 18 }}>No screenshots found</div>
+          <div style={{ opacity: 0.7 }}>Make sure your macOS screenshot save location has screenshots, or add some.</div>
         </div>
       ) : (
         <div className="gallery" style={{ marginTop: 16 }} ref={galleryRef}>

@@ -49,10 +49,47 @@ fn is_screenshot_name(file_name: &str) -> bool {
 }
 
 fn desktop_dir() -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("SSM_DESKTOP_DIR") {
-        return Some(PathBuf::from(p));
-    }
     dirs::desktop_dir()
+}
+
+// Best-effort resolution of the user's current macOS screenshot save location.
+// Falls back to Desktop if the preference is not set or invalid.
+fn screenshot_dir() -> Option<PathBuf> {
+    // Single env override for tests/advanced users
+    if let Ok(p) = std::env::var("SSM_SCREENSHOT_DIR") {
+        let pb = PathBuf::from(p);
+        if pb.exists() { return Some(pb); }
+    }
+
+    // macOS: read from com.apple.screencapture location
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        // `defaults read com.apple.screencapture location` returns a path if set
+        if let Ok(out) = Command::new("/usr/bin/defaults")
+            .arg("read")
+            .arg("com.apple.screencapture")
+            .arg("location")
+            .output()
+        {
+            if out.status.success() {
+                let mut s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !s.is_empty() {
+                    // expand leading ~ to the user's home dir
+                    if s.starts_with("~/") {
+                        if let Some(home) = dirs::home_dir() {
+                            s = home.join(s.trim_start_matches("~/")).to_string_lossy().to_string();
+                        }
+                    }
+                    let pb = PathBuf::from(&s);
+                    if pb.is_dir() { return Some(pb); }
+                }
+            }
+        }
+    }
+
+    // Fallback to Desktop
+    desktop_dir()
 }
 
 fn user_trash_dir() -> Option<PathBuf> {
@@ -65,10 +102,10 @@ fn user_trash_dir() -> Option<PathBuf> {
 #[tauri::command]
 fn list_screenshots(options: Option<ListOptions>) -> tauri::Result<Vec<ScreenshotItem>> {
     let mut items: Vec<ScreenshotItem> = Vec::new();
-    let desktop = desktop_dir().ok_or_else(|| anyhow::anyhow!("No desktop directory found"))?;
-    // scan desktop directory
-    if desktop.is_dir() {
-        for entry in fs::read_dir(&desktop).map_err(|e| anyhow::anyhow!(e))? {
+    let shots_dir = screenshot_dir().ok_or_else(|| anyhow::anyhow!("No screenshots directory found"))?;
+    // scan screenshots directory
+    if shots_dir.is_dir() {
+        for entry in fs::read_dir(&shots_dir).map_err(|e| anyhow::anyhow!(e))? {
             let entry = entry.map_err(|e| anyhow::anyhow!(e))?;
             let path = entry.path();
             if !path.is_file() {
@@ -288,6 +325,11 @@ pub fn run() {
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use once_cell::sync::Lazy;
+    use parking_lot::Mutex;
+
+    // Serialize tests that mutate process environment or filesystem globals
+    static TEST_ENV_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
     fn mk_tempdir() -> std::path::PathBuf {
         let base = std::env::temp_dir();
@@ -336,6 +378,7 @@ mod tests {
 
     #[test]
     fn undo_restores_file_from_trash_to_original() {
+        let _guard = TEST_ENV_LOCK.lock();
         let td = mk_tempdir();
         let trash_td = mk_tempdir();
         let orig = td.join("Screenshot 2025-01-01 at 1.23.45 AM.png");
@@ -369,12 +412,13 @@ mod tests {
 
     #[test]
     fn list_sort_by_name_and_size() {
+        let _guard = TEST_ENV_LOCK.lock();
         let desktop = mk_tempdir();
         // sizes 1, 3, 2 bytes
         std::fs::write(desktop.join("Screenshot small.png"), b"a").unwrap();
         std::fs::write(desktop.join("Screenshot largest.png"), b"aaa").unwrap();
         std::fs::write(desktop.join("Screenshot medium.png"), b"aa").unwrap();
-        std::env::set_var("SSM_DESKTOP_DIR", &desktop);
+        std::env::set_var("SSM_SCREENSHOT_DIR", &desktop);
 
         // Name ascending
         let items = super::list_screenshots(Some(ListOptions { sort_by: SortBy::Name, descending: false })).unwrap();
@@ -390,17 +434,18 @@ mod tests {
         let sizes: Vec<_> = items.iter().map(|i| i.size_bytes.unwrap_or(0)).collect();
         assert_eq!(sizes, vec![3, 2, 1]);
 
-        std::env::remove_var("SSM_DESKTOP_DIR");
+        std::env::remove_var("SSM_SCREENSHOT_DIR");
         let _ = std::fs::remove_dir_all(desktop);
     }
 
     #[test]
     fn list_screenshots_reads_from_overridden_desktop() {
+        let _guard = TEST_ENV_LOCK.lock();
         let desktop = mk_tempdir();
         // files
         std::fs::write(desktop.join("not-screenshot.txt"), b"x").unwrap();
         std::fs::write(desktop.join("Screenshot 2025-01-01 at 1.23.45 AM.png"), b"x").unwrap();
-        std::env::set_var("SSM_DESKTOP_DIR", &desktop);
+        std::env::set_var("SSM_SCREENSHOT_DIR", &desktop);
 
         let items = super::list_screenshots(Some(ListOptions { sort_by: SortBy::Name, descending: false }))
             .expect("ok");
@@ -408,7 +453,7 @@ mod tests {
         assert!(items[0].file_name.starts_with("Screenshot"));
 
         // cleanup var
-        std::env::remove_var("SSM_DESKTOP_DIR");
+        std::env::remove_var("SSM_SCREENSHOT_DIR");
         // cleanup temp dirs
         let _ = std::fs::remove_dir_all(desktop);
     }
