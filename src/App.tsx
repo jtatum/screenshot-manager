@@ -25,6 +25,7 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [lastTrashed, setLastTrashed] = useState<UndoEntry[]>([]);
   const [activeIndex, setActiveIndex] = useState<number>(-1);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const galleryRef = useRef<HTMLDivElement | null>(null);
   const pendingSelectIndexRef = useRef<number | null>(null);
   const pendingDeleteRef = useRef<boolean>(false);
@@ -123,7 +124,7 @@ function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Backspace" || e.key === "Delete" || e.key.toLowerCase() === "x") {
+      if (!lightboxOpen && (e.key === "Backspace" || e.key === "Delete" || e.key.toLowerCase() === "x")) {
         e.preventDefault();
         if (busy) {
           // queue deletion to run after current operation finishes
@@ -134,6 +135,15 @@ function App() {
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
         onUndo();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        setLightboxOpen(false);
+      } else if (lightboxOpen) {
+        // When lightbox is open, only space/enter should work to close it
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          setLightboxOpen(false);
+        }
       } else if (!busy && (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " ", "Enter"].includes(e.key) || ["w", "a", "s", "d"].includes(e.key.toLowerCase()))) {
         if (items.length === 0) return;
         const navKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "w", "a", "s", "d"];
@@ -163,13 +173,15 @@ function App() {
           setActiveIndex(next);
         } else if (e.key === " " || e.key === "Enter") {
           e.preventDefault();
-          // no-op for now (reserved for future actions)
+          if (activeIndex >= 0) {
+            setLightboxOpen(!lightboxOpen);
+          }
         }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [busy, items, activeIndex, onDelete, onUndo]);
+  }, [busy, items, activeIndex, lightboxOpen, onDelete, onUndo]);
 
   // run queued delete once not busy anymore
   useEffect(() => {
@@ -250,8 +262,13 @@ function App() {
               <div
                 key={it.path}
                 className={`card ${selectedItem ? "selected" : ""}`}
-                onClick={() => {
-                  setActiveIndex(idx);
+                onClick={(e) => {
+                  if (e.detail === 2) {
+                    setActiveIndex(idx);
+                    setLightboxOpen(true);
+                  } else {
+                    setActiveIndex(idx);
+                  }
                 }}
                 title={it.path}
                 data-index={idx}
@@ -275,8 +292,61 @@ function App() {
       )}
 
       <p style={{ marginTop: 12, opacity: 0.7 }}>
-        Hotkeys: WASD/Arrow keys to navigate. X/Delete/Backspace to delete. Cmd+Z to undo last delete batch.
+        Hotkeys: WASD/Arrow keys to navigate. X/Delete/Backspace to delete. Cmd+Z to undo last delete batch. Space/Enter to preview. ESC to close.
       </p>
+
+      {lightboxOpen && activeIndex >= 0 && activeIndex < items.length && (
+        <div
+          className="lightbox-overlay"
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0, 0, 0, 0.9)",
+            zIndex: 10000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+            cursor: "pointer",
+          }}
+          onClick={() => setLightboxOpen(false)}
+        >
+          <img
+            src={convertFileSrc(items[activeIndex].path)}
+            alt={displayName(items[activeIndex])}
+            style={{
+              maxWidth: "100%",
+              maxHeight: "100%",
+              objectFit: "contain",
+              cursor: "default",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+          <div
+            style={{
+              position: "absolute",
+              top: 20,
+              right: 20,
+              background: "rgba(255, 255, 255, 0.2)",
+              borderRadius: 20,
+              width: 32,
+              height: 32,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              fontSize: 18,
+              color: "white",
+            }}
+            onClick={() => setLightboxOpen(false)}
+          >
+            ×
+          </div>
+        </div>
+      )}
     </main>
   );
 }
