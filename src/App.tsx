@@ -324,6 +324,10 @@ function App() {
               cursor: "default",
             }}
             onClick={(e) => e.stopPropagation()}
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.visibility = "hidden";
+              setLightboxOpen(false);
+            }}
           />
           <div
             style={{

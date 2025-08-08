@@ -265,4 +265,32 @@ describe('App', () => {
     fireEvent.keyDown(window, { key: 'x' });
     await waitFor(() => expect(invoke).toHaveBeenCalledWith('delete_to_trash', { paths: ['/tmp/A.png'] }));
   });
+
+  it('closes lightbox when image fails to load', async () => {
+    invoke.mockImplementation(async (cmd: string, _args?: any) => {
+      if (cmd === 'list_screenshots') return items;
+      return null;
+    });
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByText('A.png')).toBeInTheDocument());
+
+    // Allow DOM to fully settle
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    // Select first item and open lightbox
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    const first = document.querySelector("[data-index='0']") as HTMLElement;
+    await waitFor(() => expect(first.className).toMatch(/selected/), { timeout: 2000 });
+
+    fireEvent.keyDown(window, { key: ' ' });
+    await waitFor(() => expect(document.querySelector('.lightbox-overlay')).toBeInTheDocument());
+
+    // Simulate image error
+    const lightboxImg = document.querySelector('.lightbox-overlay img') as HTMLImageElement;
+    fireEvent.error(lightboxImg);
+
+    // Lightbox should close automatically
+    await waitFor(() => expect(document.querySelector('.lightbox-overlay')).not.toBeInTheDocument());
+  });
 });
