@@ -18,6 +18,10 @@ type UndoEntry = {
   trashed_path: string;
 };
 
+// Layout constants - must match CSS values
+const CARD_MIN_WIDTH = 220; // matches .gallery grid-template-columns minmax value
+const CARD_GAP = 16; // matches .gallery gap value
+
 function App() {
   const [items, setItems] = useState<ScreenshotItem[]>([]);
   const [sortBy, setSortBy] = useState<SortBy>("modifiedAt");
@@ -122,69 +126,68 @@ function App() {
     }
   }, [lastTrashed, load]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!lightboxOpen && (e.key === "Backspace" || e.key === "Delete" || e.key.toLowerCase() === "x")) {
-        e.preventDefault();
-        if (busy) {
-          // queue deletion to run after current operation finishes
-          pendingDeleteRef.current = true;
-        } else {
-          onDelete();
-        }
-      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
-        e.preventDefault();
-        onUndo();
-      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "r") {
-        e.preventDefault();
-        load();
-      } else if (e.key === "Escape") {
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (!lightboxOpen && (e.key === "Backspace" || e.key === "Delete" || e.key.toLowerCase() === "x")) {
+      e.preventDefault();
+      if (busy) {
+        // queue deletion to run after current operation finishes
+        pendingDeleteRef.current = true;
+      } else {
+        onDelete();
+      }
+    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+      e.preventDefault();
+      onUndo();
+    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "r") {
+      e.preventDefault();
+      load();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setLightboxOpen(false);
+    } else if (lightboxOpen) {
+      // When lightbox is open, only space/enter should work to close it
+      if (e.key === " " || e.key === "Enter") {
         e.preventDefault();
         setLightboxOpen(false);
-      } else if (lightboxOpen) {
-        // When lightbox is open, only space/enter should work to close it
-        if (e.key === " " || e.key === "Enter") {
-          e.preventDefault();
-          setLightboxOpen(false);
-        }
-      } else if (!busy && (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " ", "Enter"].includes(e.key) || ["w", "a", "s", "d"].includes(e.key.toLowerCase()))) {
-        if (items.length === 0) return;
-        const navKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "w", "a", "s", "d"];
-        if (activeIndex < 0 && (navKeys.includes(e.key) || navKeys.includes(e.key.toLowerCase()))) {
-          e.preventDefault();
-          setActiveIndex(0);
-          return;
-        }
-        const ensureActive = (idx: number) => Math.max(0, Math.min(items.length - 1, idx));
-        const getCols = () => {
-          const el = galleryRef.current;
-          if (!el) return 1;
-          const width = el.clientWidth || 1;
-          const min = 220; // matches css min card width
-          const gap = 16;  // matches css gap
-          return Math.max(1, Math.floor((width + gap) / (min + gap)));
-        };
-        let next = activeIndex >= 0 ? activeIndex : 0;
-        const key = e.key.toLowerCase();
-        if (e.key === "ArrowRight" || key === "d") next = ensureActive(next + 1);
-        else if (e.key === "ArrowLeft" || key === "a") next = ensureActive(next - 1);
-        else if (e.key === "ArrowDown" || key === "s") next = ensureActive(next + getCols());
-        else if (e.key === "ArrowUp" || key === "w") next = ensureActive(next - getCols());
+      }
+    } else if (!busy && (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " ", "Enter"].includes(e.key) || ["w", "a", "s", "d"].includes(e.key.toLowerCase()))) {
+      if (items.length === 0) return;
+      const navKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "w", "a", "s", "d"];
+      if (activeIndex < 0 && (navKeys.includes(e.key) || navKeys.includes(e.key.toLowerCase()))) {
+        e.preventDefault();
+        setActiveIndex(0);
+        return;
+      }
+      const ensureActive = (idx: number) => Math.max(0, Math.min(items.length - 1, idx));
+      const getCols = () => {
+        const el = galleryRef.current;
+        if (!el) return 1;
+        const width = el.clientWidth || 1;
+        return Math.max(1, Math.floor((width + CARD_GAP) / (CARD_MIN_WIDTH + CARD_GAP)));
+      };
+      let next = activeIndex >= 0 ? activeIndex : 0;
+      const key = e.key.toLowerCase();
+      if (e.key === "ArrowRight" || key === "d") next = ensureActive(next + 1);
+      else if (e.key === "ArrowLeft" || key === "a") next = ensureActive(next - 1);
+      else if (e.key === "ArrowDown" || key === "s") next = ensureActive(next + getCols());
+      else if (e.key === "ArrowUp" || key === "w") next = ensureActive(next - getCols());
 
-        if (navKeys.includes(e.key) || navKeys.includes(key)) {
-          e.preventDefault();
-          setActiveIndex(next);
-        } else if (e.key === " " || e.key === "Enter") {
-          e.preventDefault();
-          if (activeIndex >= 0) {
-            setLightboxOpen(!lightboxOpen);
-          }
+      if (navKeys.includes(e.key) || navKeys.includes(key)) {
+        e.preventDefault();
+        setActiveIndex(next);
+      } else if (e.key === " " || e.key === "Enter") {
+        e.preventDefault();
+        if (activeIndex >= 0) {
+          setLightboxOpen(!lightboxOpen);
         }
       }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    }
   }, [busy, items, activeIndex, lightboxOpen, load, onDelete, onUndo]);
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleKeyDown]);
 
   // run queued delete once not busy anymore
   useEffect(() => {
@@ -237,7 +240,8 @@ function App() {
               <span style={{ opacity: 0.9, fontSize: 14, color: "rgba(255, 255, 255, 0.9)" }}>Sort by</span>
               <select 
                 value={sortBy} 
-                onChange={(e) => setSortBy(e.target.value as SortBy)} 
+                onChange={(e) => setSortBy(e.target.value as SortBy)}
+                aria-label="Sort screenshots by"
                 style={{ 
                   padding: "8px 12px", 
                   borderRadius: "12px", 
@@ -269,7 +273,8 @@ function App() {
                 <input 
                   type="checkbox" 
                   checked={descending} 
-                  onChange={(e) => setDescending(e.target.checked)} 
+                  onChange={(e) => setDescending(e.target.checked)}
+                  aria-label="Sort in descending order (newest first)"
                   style={{ 
                     width: "16px", 
                     height: "16px", 
