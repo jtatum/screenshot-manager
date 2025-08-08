@@ -123,7 +123,7 @@ function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Backspace" || e.key === "Delete") {
+      if (e.key === "Backspace" || e.key === "Delete" || e.key.toLowerCase() === "x") {
         e.preventDefault();
         if (busy) {
           // queue deletion to run after current operation finishes
@@ -134,9 +134,10 @@ function App() {
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
         onUndo();
-      } else if (!busy && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " ", "Enter"].includes(e.key)) {
+      } else if (!busy && (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " ", "Enter"].includes(e.key) || ["w", "a", "s", "d"].includes(e.key.toLowerCase()))) {
         if (items.length === 0) return;
-        if (activeIndex < 0 && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) {
+        const navKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "w", "a", "s", "d"];
+        if (activeIndex < 0 && (navKeys.includes(e.key) || navKeys.includes(e.key.toLowerCase()))) {
           e.preventDefault();
           setActiveIndex(0);
           return;
@@ -151,12 +152,13 @@ function App() {
           return Math.max(1, Math.floor((width + gap) / (min + gap)));
         };
         let next = activeIndex >= 0 ? activeIndex : 0;
-        if (e.key === "ArrowRight") next = ensureActive(next + 1);
-        else if (e.key === "ArrowLeft") next = ensureActive(next - 1);
-        else if (e.key === "ArrowDown") next = ensureActive(next + getCols());
-        else if (e.key === "ArrowUp") next = ensureActive(next - getCols());
+        const key = e.key.toLowerCase();
+        if (e.key === "ArrowRight" || key === "d") next = ensureActive(next + 1);
+        else if (e.key === "ArrowLeft" || key === "a") next = ensureActive(next - 1);
+        else if (e.key === "ArrowDown" || key === "s") next = ensureActive(next + getCols());
+        else if (e.key === "ArrowUp" || key === "w") next = ensureActive(next - getCols());
 
-        if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) {
+        if (navKeys.includes(e.key) || navKeys.includes(key)) {
           e.preventDefault();
           setActiveIndex(next);
         } else if (e.key === " " || e.key === "Enter") {
@@ -216,7 +218,7 @@ function App() {
         <h1 style={{ margin: 0, fontSize: 20 }}>Screenshot Manager</h1>
         <div style={{ display: "flex", gap: 8, marginLeft: 16 }}>
           <button onClick={load} disabled={busy}>Refresh</button>
-          <button onClick={onDelete} disabled={busy || activeIndex < 0}>Delete (⌫)</button>
+          <button onClick={onDelete} disabled={busy || activeIndex < 0}>Delete (X/⌫)</button>
           <button onClick={onUndo} disabled={busy || lastTrashed.length === 0}>Undo (⌘Z)</button>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
@@ -273,7 +275,7 @@ function App() {
       )}
 
       <p style={{ marginTop: 12, opacity: 0.7 }}>
-        Hotkeys: Delete/Backspace to delete. Cmd+Z to undo last delete batch.
+        Hotkeys: WASD/Arrow keys to navigate. X/Delete/Backspace to delete. Cmd+Z to undo last delete batch.
       </p>
     </main>
   );

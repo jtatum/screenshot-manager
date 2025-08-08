@@ -97,6 +97,41 @@ describe('App', () => {
     expect(screen.getByText('A.png')).toBeInTheDocument();
   });
 
+  it('supports WASD navigation and X delete', async () => {
+    invoke.mockImplementation(async (cmd: string, _args?: any) => {
+      if (cmd === 'list_screenshots') return items;
+      if (cmd === 'delete_to_trash') return { trashed: [] };
+      if (cmd === 'undo_last_delete') return [];
+      return null;
+    });
+
+    render(<App />);
+
+    // Wait for items to appear
+    await waitFor(() => expect(screen.getByText('A.png')).toBeInTheDocument());
+
+    // Allow DOM to fully settle before keyboard interaction
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    // Test WASD navigation: D (right) should select first card
+    fireEvent.keyDown(window, { key: 'd' });
+    const first = document.querySelector("[data-index='0']") as HTMLElement;
+    await waitFor(() => expect(first.className).toMatch(/selected/), { timeout: 2000 });
+
+    // D again goes to second
+    fireEvent.keyDown(window, { key: 'd' });
+    const second = document.querySelector("[data-index='1']") as HTMLElement;
+    await waitFor(() => expect(second.className).toMatch(/selected/), { timeout: 2000 });
+
+    // A (left) goes back to first
+    fireEvent.keyDown(window, { key: 'a' });
+    await waitFor(() => expect(first.className).toMatch(/selected/), { timeout: 2000 });
+
+    // Test X for delete (should call delete_to_trash)
+    fireEvent.keyDown(window, { key: 'x' });
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('delete_to_trash', { paths: ['/tmp/A.png'] }));
+  });
+
   it('undo error shows toast with Reveal', async () => {
     const seq: any[][] = [items, items];
     invoke.mockImplementation(async (cmd: string, _args?: any) => {
