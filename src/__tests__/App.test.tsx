@@ -49,6 +49,9 @@ describe('App', () => {
     // Wait for an item to appear
     await waitFor(() => expect(screen.getByText('A.png')).toBeInTheDocument());
 
+    // Allow DOM to fully settle before keyboard interaction
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     // No selection initially; first ArrowRight selects first card
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     const first = document.querySelector("[data-index='0']") as HTMLElement;
@@ -76,6 +79,9 @@ describe('App', () => {
 
     render(<App />);
     await waitFor(() => expect(screen.getByText('A.png')).toBeInTheDocument());
+
+    // Allow DOM to fully settle before keyboard interaction  
+    await new Promise(resolve => setTimeout(resolve, 100));
 
     // Select second (B)
     fireEvent.keyDown(window, { key: 'ArrowRight' });
