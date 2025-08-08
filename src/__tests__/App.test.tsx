@@ -49,15 +49,18 @@ describe('App', () => {
     // Wait for an item to appear
     await waitFor(() => expect(screen.getByText('A.png')).toBeInTheDocument());
 
+    // Allow DOM to fully settle before keyboard interaction
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     // No selection initially; first ArrowRight selects first card
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     const first = document.querySelector("[data-index='0']") as HTMLElement;
-    await waitFor(() => expect(first.className).toMatch(/selected/), { timeout: 5000 });
+    await waitFor(() => expect(first.className).toMatch(/selected/), { timeout: 2000 });
 
     // Next ArrowRight goes to second
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     const second = document.querySelector("[data-index='1']") as HTMLElement;
-    await waitFor(() => expect(second.className).toMatch(/selected/), { timeout: 5000 });
+    await waitFor(() => expect(second.className).toMatch(/selected/), { timeout: 2000 });
   });
 
   it('delete removes current and selects next', async () => {
@@ -77,11 +80,14 @@ describe('App', () => {
     render(<App />);
     await waitFor(() => expect(screen.getByText('A.png')).toBeInTheDocument());
 
+    // Allow DOM to fully settle before keyboard interaction  
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     // Select second (B)
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     const second = document.querySelector("[data-index='1']") as HTMLElement;
-    await waitFor(() => expect(second.className).toMatch(/selected/), { timeout: 5000 });
+    await waitFor(() => expect(second.className).toMatch(/selected/), { timeout: 2000 });
 
     // Delete
     fireEvent.keyDown(window, { key: 'Delete' });
