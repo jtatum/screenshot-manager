@@ -18,6 +18,10 @@ type UndoEntry = {
   trashed_path: string;
 };
 
+// Layout constants - must match CSS values
+const CARD_MIN_WIDTH = 220; // matches .gallery grid-template-columns minmax value
+const CARD_GAP = 16; // matches .gallery gap value
+
 function App() {
   const [items, setItems] = useState<ScreenshotItem[]>([]);
   const [sortBy, setSortBy] = useState<SortBy>("modifiedAt");
@@ -122,66 +126,68 @@ function App() {
     }
   }, [lastTrashed, load]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!lightboxOpen && (e.key === "Backspace" || e.key === "Delete" || e.key.toLowerCase() === "x")) {
-        e.preventDefault();
-        if (busy) {
-          // queue deletion to run after current operation finishes
-          pendingDeleteRef.current = true;
-        } else {
-          onDelete();
-        }
-      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
-        e.preventDefault();
-        onUndo();
-      } else if (e.key === "Escape") {
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (!lightboxOpen && (e.key === "Backspace" || e.key === "Delete" || e.key.toLowerCase() === "x")) {
+      e.preventDefault();
+      if (busy) {
+        // queue deletion to run after current operation finishes
+        pendingDeleteRef.current = true;
+      } else {
+        onDelete();
+      }
+    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+      e.preventDefault();
+      onUndo();
+    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "r") {
+      e.preventDefault();
+      load();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setLightboxOpen(false);
+    } else if (lightboxOpen) {
+      // When lightbox is open, only space/enter should work to close it
+      if (e.key === " " || e.key === "Enter") {
         e.preventDefault();
         setLightboxOpen(false);
-      } else if (lightboxOpen) {
-        // When lightbox is open, only space/enter should work to close it
-        if (e.key === " " || e.key === "Enter") {
-          e.preventDefault();
-          setLightboxOpen(false);
-        }
-      } else if (!busy && (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " ", "Enter"].includes(e.key) || ["w", "a", "s", "d"].includes(e.key.toLowerCase()))) {
-        if (items.length === 0) return;
-        const navKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "w", "a", "s", "d"];
-        if (activeIndex < 0 && (navKeys.includes(e.key) || navKeys.includes(e.key.toLowerCase()))) {
-          e.preventDefault();
-          setActiveIndex(0);
-          return;
-        }
-        const ensureActive = (idx: number) => Math.max(0, Math.min(items.length - 1, idx));
-        const getCols = () => {
-          const el = galleryRef.current;
-          if (!el) return 1;
-          const width = el.clientWidth || 1;
-          const min = 220; // matches css min card width
-          const gap = 16;  // matches css gap
-          return Math.max(1, Math.floor((width + gap) / (min + gap)));
-        };
-        let next = activeIndex >= 0 ? activeIndex : 0;
-        const key = e.key.toLowerCase();
-        if (e.key === "ArrowRight" || key === "d") next = ensureActive(next + 1);
-        else if (e.key === "ArrowLeft" || key === "a") next = ensureActive(next - 1);
-        else if (e.key === "ArrowDown" || key === "s") next = ensureActive(next + getCols());
-        else if (e.key === "ArrowUp" || key === "w") next = ensureActive(next - getCols());
+      }
+    } else if (!busy && (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " ", "Enter"].includes(e.key) || ["w", "a", "s", "d"].includes(e.key.toLowerCase()))) {
+      if (items.length === 0) return;
+      const navKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "w", "a", "s", "d"];
+      if (activeIndex < 0 && (navKeys.includes(e.key) || navKeys.includes(e.key.toLowerCase()))) {
+        e.preventDefault();
+        setActiveIndex(0);
+        return;
+      }
+      const ensureActive = (idx: number) => Math.max(0, Math.min(items.length - 1, idx));
+      const getCols = () => {
+        const el = galleryRef.current;
+        if (!el) return 1;
+        const width = el.clientWidth || 1;
+        return Math.max(1, Math.floor((width + CARD_GAP) / (CARD_MIN_WIDTH + CARD_GAP)));
+      };
+      let next = activeIndex >= 0 ? activeIndex : 0;
+      const key = e.key.toLowerCase();
+      if (e.key === "ArrowRight" || key === "d") next = ensureActive(next + 1);
+      else if (e.key === "ArrowLeft" || key === "a") next = ensureActive(next - 1);
+      else if (e.key === "ArrowDown" || key === "s") next = ensureActive(next + getCols());
+      else if (e.key === "ArrowUp" || key === "w") next = ensureActive(next - getCols());
 
-        if (navKeys.includes(e.key) || navKeys.includes(key)) {
-          e.preventDefault();
-          setActiveIndex(next);
-        } else if (e.key === " " || e.key === "Enter") {
-          e.preventDefault();
-          if (activeIndex >= 0) {
-            setLightboxOpen(!lightboxOpen);
-          }
+      if (navKeys.includes(e.key) || navKeys.includes(key)) {
+        e.preventDefault();
+        setActiveIndex(next);
+      } else if (e.key === " " || e.key === "Enter") {
+        e.preventDefault();
+        if (activeIndex >= 0) {
+          setLightboxOpen(!lightboxOpen);
         }
       }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [busy, items, activeIndex, lightboxOpen, onDelete, onUndo]);
+    }
+  }, [busy, items, activeIndex, lightboxOpen, load, onDelete, onUndo]);
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleKeyDown]);
 
   // run queued delete once not busy anymore
   useEffect(() => {
@@ -226,26 +232,108 @@ function App() {
           <button onClick={() => setNotice(null)}>Dismiss</button>
         </div>
       )}
-      <div className="toolbar row" style={{ gap: 8, alignItems: "center", position: "sticky", top: 12, zIndex: 10 }}>
-        <h1 style={{ margin: 0, fontSize: 20 }}>Screenshot Manager</h1>
-        <div style={{ display: "flex", gap: 8, marginLeft: 16 }}>
-          <button onClick={load} disabled={busy}>Refresh</button>
-          <button onClick={onDelete} disabled={busy || activeIndex < 0}>Delete (X/⌫)</button>
-          <button onClick={onUndo} disabled={busy || lastTrashed.length === 0}>Undo (⌘Z)</button>
+      <div style={{ background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", color: "white", padding: "16px 20px", marginBottom: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>Screenshot Manager</h1>
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ opacity: 0.9, fontSize: 14, color: "rgba(255, 255, 255, 0.9)" }}>Sort by</span>
+              <select 
+                value={sortBy} 
+                onChange={(e) => setSortBy(e.target.value as SortBy)}
+                aria-label="Sort screenshots by"
+                style={{ 
+                  padding: "8px 12px", 
+                  borderRadius: "12px", 
+                  border: "2px solid rgba(255, 255, 255, 0.4)", 
+                  fontSize: 14, 
+                  background: "rgba(255, 255, 255, 0.15)", 
+                  backgroundColor: "rgba(255, 255, 255, 0.15)",
+                  color: "white", 
+                  backdropFilter: "blur(10px)", 
+                  appearance: "none",
+                  WebkitAppearance: "none",
+                  MozAppearance: "none",
+                  backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, 
+                  backgroundPosition: "right 10px center", 
+                  backgroundRepeat: "no-repeat", 
+                  backgroundSize: "16px", 
+                  paddingRight: "36px", 
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                  outline: "none"
+                }}>
+                <option value="modifiedAt">Modified</option>
+                <option value="createdAt">Created</option>
+                <option value="name">Name</option>
+                <option value="size">Size</option>
+              </select>
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", background: "rgba(255, 255, 255, 0.15)", padding: "8px 12px", borderRadius: "12px", border: "2px solid rgba(255, 255, 255, 0.4)", backdropFilter: "blur(10px)" }} title="Sort order">
+              <div style={{ position: "relative", width: "16px", height: "16px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <input 
+                  type="checkbox" 
+                  checked={descending} 
+                  onChange={(e) => setDescending(e.target.checked)}
+                  aria-label="Sort in descending order (newest first)"
+                  style={{ 
+                    width: "16px", 
+                    height: "16px", 
+                    margin: 0,
+                    padding: 0,
+                    background: "transparent", 
+                    backgroundColor: "transparent", 
+                    border: "2px solid rgba(255, 255, 255, 0.6)", 
+                    borderRadius: "3px", 
+                    appearance: "none", 
+                    WebkitAppearance: "none",
+                    cursor: "pointer",
+                    position: "relative"
+                  }} 
+                />
+                {descending && (
+                  <div style={{ 
+                    position: "absolute", 
+                    top: "3px", 
+                    left: "5px", 
+                    width: "4px", 
+                    height: "7px", 
+                    border: "solid white", 
+                    borderWidth: "0 2px 2px 0", 
+                    transform: "rotate(45deg)",
+                    pointerEvents: "none"
+                  }} />
+                )}
+              </div>
+              <span style={{ fontSize: 14, color: "rgba(255, 255, 255, 0.95)", fontWeight: 500 }}>Newest first</span>
+            </label>
+          </div>
         </div>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
-          <label>
-            <span style={{ opacity: 0.7, marginRight: 6 }}>Sort</span>
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortBy)}>
-              <option value="modifiedAt">Modified</option>
-              <option value="createdAt">Created</option>
-              <option value="name">Name</option>
-              <option value="size">Size</option>
-            </select>
-          </label>
-          <label title="Descending">
-            <input type="checkbox" checked={descending} onChange={(e) => setDescending(e.target.checked)} /> ↓
-          </label>
+        
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, fontSize: 13, color: "rgba(255, 255, 255, 0.9)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <kbd style={{ background: "rgba(255, 255, 255, 0.2)", color: "white", padding: "3px 7px", borderRadius: 6, fontSize: 10, fontFamily: "monospace", border: "1px solid rgba(255, 255, 255, 0.3)" }}>↑↓←→ or WASD</kbd>
+            <span>Navigate</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <kbd style={{ background: "rgba(255, 255, 255, 0.2)", color: "white", padding: "3px 7px", borderRadius: 6, fontSize: 10, fontFamily: "monospace", border: "1px solid rgba(255, 255, 255, 0.3)" }}>Space or Enter</kbd>
+            <span>Preview</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <kbd style={{ background: "rgba(255, 255, 255, 0.2)", color: "white", padding: "3px 7px", borderRadius: 6, fontSize: 10, fontFamily: "monospace", border: "1px solid rgba(255, 255, 255, 0.3)" }}>X, Del, or ⌫</kbd>
+            <span>Delete</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <kbd style={{ background: "rgba(255, 255, 255, 0.2)", color: "white", padding: "3px 7px", borderRadius: 6, fontSize: 10, fontFamily: "monospace", border: "1px solid rgba(255, 255, 255, 0.3)" }}>Cmd+Z</kbd>
+            <span>Undo</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <kbd style={{ background: "rgba(255, 255, 255, 0.2)", color: "white", padding: "3px 7px", borderRadius: 6, fontSize: 10, fontFamily: "monospace", border: "1px solid rgba(255, 255, 255, 0.3)" }}>Cmd+R</kbd>
+            <span>Refresh</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <kbd style={{ background: "rgba(255, 255, 255, 0.2)", color: "white", padding: "3px 7px", borderRadius: 6, fontSize: 10, fontFamily: "monospace", border: "1px solid rgba(255, 255, 255, 0.3)" }}>ESC</kbd>
+            <span>Close preview</span>
+          </div>
         </div>
       </div>
 
@@ -289,9 +377,6 @@ function App() {
         </div>
       )}
 
-      <p style={{ marginTop: 12, opacity: 0.7 }}>
-        Hotkeys: WASD/Arrow keys to navigate. X/Delete/Backspace to delete. Cmd+Z to undo last delete batch. Space/Enter to preview. ESC to close.
-      </p>
 
       {lightboxOpen && activeIndex >= 0 && activeIndex < items.length && (
         <div

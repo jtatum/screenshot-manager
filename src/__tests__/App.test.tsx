@@ -147,14 +147,19 @@ describe('App', () => {
     // Select first and delete to create lastTrashed
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     fireEvent.keyDown(window, { key: 'Delete' });
+    
+    // Wait for delete operation to complete
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('delete_to_trash', { paths: ['/tmp/A.png'] }));
     await waitFor(() => expect(screen.getByText('A.png')).toBeInTheDocument());
 
-    // Click Undo button (rather than Cmd+Z)
-    const undoBtn = screen.getByRole('button', { name: /Undo/ });
-    fireEvent.click(undoBtn);
+    // Allow some time for state to update
+    await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Toast appears with guidance
-    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    // Use Cmd+Z keyboard shortcut for undo (no buttons in new UI)
+    fireEvent.keyDown(window, { key: 'z', metaKey: true });
+
+    // Toast appears with guidance after undo fails
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument(), { timeout: 3000 });
     expect(screen.getByText(/Full Disk Access/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reveal' })).toBeInTheDocument();
   });
@@ -292,5 +297,29 @@ describe('App', () => {
 
     // Lightbox should close automatically
     await waitFor(() => expect(document.querySelector('.lightbox-overlay')).not.toBeInTheDocument());
+  });
+
+  it('refreshes with Cmd+R keyboard shortcut', async () => {
+    invoke.mockImplementation(async (cmd: string, _args?: any) => {
+      if (cmd === 'list_screenshots') return items;
+      return null;
+    });
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByText('A.png')).toBeInTheDocument());
+
+    // Allow DOM to fully settle
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    // Reset the mock call count
+    invoke.mockClear();
+
+    // Press Cmd+R to refresh
+    fireEvent.keyDown(window, { key: 'r', metaKey: true });
+
+    // Should call list_screenshots again
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('list_screenshots', {
+      options: { sortBy: 'modifiedAt', descending: true }
+    }));
   });
 });
