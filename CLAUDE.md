@@ -59,8 +59,10 @@ npm run build                 # Build web assets only
 # 2. src-tauri/Cargo.toml - "version" field  
 # 3. src-tauri/tauri.conf.json - "version" field (controls DMG naming)
 
-# Create release:
-git tag v0.x.x && git push origin v0.x.x    # Triggers GitHub Actions build
+# After updating version numbers:
+npm test                                     # Run tests (updates Cargo.lock)
+git add . && git commit -m "release: v0.x.x" && git push  # Commit and push changes
+git tag v0.x.x && git push origin v0.x.x     # Create and push tag (triggers GitHub Actions build)
 ```
 
 ### Single Test Execution
