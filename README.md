@@ -1,8 +1,10 @@
-# Screenshot Manager (Tauri + React + TypeScript)
+# Screenshot Manager
 
 [![CI](https://github.com/jtatum/ssmanager/actions/workflows/ci.yml/badge.svg)](https://github.com/jtatum/ssmanager/actions/workflows/ci.yml)
 
-A desktop app built with Tauri 2, Vite, React, and TypeScript for managing screenshots on your machine.
+A tiny, fast Mac app for quickly managing screenshots on your desktop. View all your screenshots in one place and delete them instantly with mouse clicks or keyboard shortcuts.
+
+**Built with:** Tauri 2 + React + TypeScript
 
 ## Quick Start
 
