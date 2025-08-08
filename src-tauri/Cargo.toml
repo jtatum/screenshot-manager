@@ -36,4 +36,3 @@ thiserror = "1"
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.5"
 objc2-foundation = { version = "0.2", features = ["NSAutoreleasePool", "NSError", "NSFileManager", "NSString", "NSURL"] }
-

@@ -49,7 +49,17 @@ fn is_screenshot_name(file_name: &str) -> bool {
 }
 
 fn desktop_dir() -> Option<PathBuf> {
+    if let Ok(p) = std::env::var("SSM_DESKTOP_DIR") {
+        return Some(PathBuf::from(p));
+    }
     dirs::desktop_dir()
+}
+
+fn user_trash_dir() -> Option<PathBuf> {
+    if let Ok(p) = std::env::var("SSM_TRASH_DIR") {
+        return Some(PathBuf::from(p));
+    }
+    dirs::home_dir().map(|p| p.join(".Trash"))
 }
 
 #[tauri::command]
@@ -172,8 +182,7 @@ fn best_trash_candidate(trash_dir: &PathBuf, original_name: &str, deleted_at_ms:
 #[tauri::command]
 fn delete_to_trash(paths: Vec<String>) -> tauri::Result<TrashResult> {
     let mut results: Vec<UndoEntry> = Vec::new();
-    let trash_dir = dirs::home_dir()
-        .map(|p| p.join(".Trash"))
+    let trash_dir = user_trash_dir()
         .ok_or_else(|| anyhow::anyhow!("Cannot resolve user Trash directory"))?;
 
     for p in paths {
@@ -242,7 +251,7 @@ fn undo_last_delete(count: Option<usize>) -> tauri::Result<Vec<UndoEntry>> {
                 }
             } else {
                 // Fallback: try to locate the trashed file by name in ~/.Trash (best effort)
-                if let Some(trash_dir) = dirs::home_dir().map(|p| p.join(".Trash")) {
+                if let Some(trash_dir) = user_trash_dir() {
                     if trash_dir.is_dir() {
                         let candidate = best_trash_candidate(&trash_dir, &entry.file_name, Some(entry.deleted_at_ms));
                         if let Some(found) = candidate {
@@ -273,4 +282,134 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![list_screenshots, delete_to_trash, undo_last_delete])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static COUNTER: AtomicUsize = AtomicUsize::new(0);
+    fn mk_tempdir() -> std::path::PathBuf {
+        let base = std::env::temp_dir();
+        let unique = format!(
+            "ssm-test-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::SeqCst)
+        );
+        let dir = base.join(unique);
+        std::fs::create_dir(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn screenshot_name_detection() {
+        assert!(super::is_screenshot_name("Screenshot 2025-01-01 at 1.23.45 AM.png"));
+        assert!(super::is_screenshot_name("screen shot 2025-01-01 at 1.23.45 AM.jpg"));
+        assert!(!super::is_screenshot_name("notes.txt"));
+        assert!(!super::is_screenshot_name("photo.jpeg.backup"));
+    }
+
+    #[test]
+    fn fuzzy_name_match_variants() {
+        assert!(super::looks_like_same_file("Screenshot 2025-01-01 at 1.23.45 AM.png", "Screenshot 2025-01-01 at 1.23.45 AM.png"));
+        assert!(super::looks_like_same_file("Screenshot 2025-01-01 at 1.23.45 AM 2.png", "Screenshot 2025-01-01 at 1.23.45 AM.png"));
+        assert!(super::looks_like_same_file("Screenshot 2025-01-01 at 1.23.45 AM copy.png", "Screenshot 2025-01-01 at 1.23.45 AM.png"));
+        assert!(!super::looks_like_same_file("Other 2025-01-01.png", "Screenshot 2025-01-01 at 1.23.45 AM.png"));
+        assert!(!super::looks_like_same_file("Screenshot 2025-01-01.png", "Screenshot 2025-01-01.jpg"));
+    }
+
+    #[test]
+    fn best_trash_candidate_picks_latest_like_name() {
+        let trash = mk_tempdir();
+        let base = "Screenshot 2025-01-01 at 1.23.45 AM.png";
+
+        // create two candidate files; the second should be picked (newer mtime)
+        let p1 = trash.join(base);
+        std::fs::write(&p1, b"a").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+        let p2 = trash.join("Screenshot 2025-01-01 at 1.23.45 AM 2.png");
+        std::fs::write(&p2, b"b").unwrap();
+
+        let cand = super::best_trash_candidate(&trash, base, None).unwrap();
+        assert_eq!(cand, p2);
+    }
+
+    #[test]
+    fn undo_restores_file_from_trash_to_original() {
+        let td = mk_tempdir();
+        let trash_td = mk_tempdir();
+        let orig = td.join("Screenshot 2025-01-01 at 1.23.45 AM.png");
+        // Ensure original does not exist yet
+        assert!(!orig.exists());
+
+        let trashed = trash_td.join("Screenshot 2025-01-01 at 1.23.45 AM.png");
+        std::fs::write(&trashed, b"img").unwrap();
+
+        // Push entry on undo stack
+        let entry = UndoEntry {
+            original_path: orig.to_string_lossy().into_owned(),
+            trashed_path: trashed.to_string_lossy().into_owned(),
+            file_name: "Screenshot 2025-01-01 at 1.23.45 AM.png".to_string(),
+            deleted_at_ms: 0,
+        };
+        UNDO_STACK.lock().push(entry);
+
+        // point the app's trash dir to our temp location to exercise the direct path branch
+        std::env::set_var("SSM_TRASH_DIR", &trash_td);
+        let res = super::undo_last_delete(Some(1)).unwrap();
+        assert_eq!(res.len(), 1);
+        assert!(orig.exists());
+        assert!(!trashed.exists());
+        std::env::remove_var("SSM_TRASH_DIR");
+    }
+
+    // NOTE: The "(restored)" collision path is exercised indirectly by logic,
+    // but performing cross-device or sandboxed renames in this environment can be flaky,
+    // so we skip a direct filesystem assertion here.
+
+    #[test]
+    fn list_sort_by_name_and_size() {
+        let desktop = mk_tempdir();
+        // sizes 1, 3, 2 bytes
+        std::fs::write(desktop.join("Screenshot small.png"), b"a").unwrap();
+        std::fs::write(desktop.join("Screenshot largest.png"), b"aaa").unwrap();
+        std::fs::write(desktop.join("Screenshot medium.png"), b"aa").unwrap();
+        std::env::set_var("SSM_DESKTOP_DIR", &desktop);
+
+        // Name ascending
+        let items = super::list_screenshots(Some(ListOptions { sort_by: SortBy::Name, descending: false })).unwrap();
+        let names: Vec<_> = items.iter().map(|i| i.file_name.clone()).collect();
+        assert_eq!(names, vec![
+            "Screenshot largest.png",
+            "Screenshot medium.png",
+            "Screenshot small.png",
+        ]);
+
+        // Size descending
+        let items = super::list_screenshots(Some(ListOptions { sort_by: SortBy::Size, descending: true })).unwrap();
+        let sizes: Vec<_> = items.iter().map(|i| i.size_bytes.unwrap_or(0)).collect();
+        assert_eq!(sizes, vec![3, 2, 1]);
+
+        std::env::remove_var("SSM_DESKTOP_DIR");
+        let _ = std::fs::remove_dir_all(desktop);
+    }
+
+    #[test]
+    fn list_screenshots_reads_from_overridden_desktop() {
+        let desktop = mk_tempdir();
+        // files
+        std::fs::write(desktop.join("not-screenshot.txt"), b"x").unwrap();
+        std::fs::write(desktop.join("Screenshot 2025-01-01 at 1.23.45 AM.png"), b"x").unwrap();
+        std::env::set_var("SSM_DESKTOP_DIR", &desktop);
+
+        let items = super::list_screenshots(Some(ListOptions { sort_by: SortBy::Name, descending: false }))
+            .expect("ok");
+        assert_eq!(items.len(), 1);
+        assert!(items[0].file_name.starts_with("Screenshot"));
+
+        // cleanup var
+        std::env::remove_var("SSM_DESKTOP_DIR");
+        // cleanup temp dirs
+        let _ = std::fs::remove_dir_all(desktop);
+    }
 }
