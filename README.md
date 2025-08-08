@@ -4,6 +4,14 @@
 
 A tiny, fast Mac app for quickly managing screenshots on your desktop. View all your screenshots in one place and delete them instantly with mouse clicks or keyboard shortcuts.
 
+## The Story
+
+If you're like me, when you take a screenshot on Mac, you'll use it for whatever you need and then forget about it. At least, until you notice that your desktop has dozens of ancient, useless screenshots. 
+
+I wanted a way to quickly go through them and delete the screenshots I don't need anymore. That's why I made this, and why I made it fast - it's a tiny app and has keyboard shortcuts for really quick reviews and deletes. 
+
+Let's clean! 🧹
+
 **Built with:** Tauri 2 + React + TypeScript
 
 ## Quick Start
