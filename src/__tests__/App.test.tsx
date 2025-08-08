@@ -50,7 +50,7 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByText('A.png')).toBeInTheDocument());
 
     // Allow DOM to fully settle before keyboard interaction
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 200));
 
     // No selection initially; first ArrowRight selects first card
     fireEvent.keyDown(window, { key: 'ArrowRight' });
@@ -81,7 +81,7 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByText('A.png')).toBeInTheDocument());
 
     // Allow DOM to fully settle before keyboard interaction  
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 200));
 
     // Select second (B)
     fireEvent.keyDown(window, { key: 'ArrowRight' });
