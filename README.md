@@ -1,6 +1,6 @@
 # Screenshot Manager (Tauri + React + TypeScript)
 
-[![CI](https://github.com/jtautm/ssmanager/actions/workflows/ci.yml/badge.svg)](https://github.com/jtautm/ssmanager/actions/workflows/ci.yml)
+[![CI](https://github.com/jtatum/ssmanager/actions/workflows/ci.yml/badge.svg)](https://github.com/jtatum/ssmanager/actions/workflows/ci.yml)
 
 A desktop app built with Tauri 2, Vite, React, and TypeScript for managing screenshots on your machine.
 
