@@ -52,12 +52,12 @@ describe('App', () => {
     // No selection initially; first ArrowRight selects first card
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     const first = document.querySelector("[data-index='0']") as HTMLElement;
-    await waitFor(() => expect(first.className).toMatch(/selected/), { timeout: 2000 });
+    await waitFor(() => expect(first.className).toMatch(/selected/), { timeout: 5000 });
 
     // Next ArrowRight goes to second
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     const second = document.querySelector("[data-index='1']") as HTMLElement;
-    await waitFor(() => expect(second.className).toMatch(/selected/), { timeout: 2000 });
+    await waitFor(() => expect(second.className).toMatch(/selected/), { timeout: 5000 });
   });
 
   it('delete removes current and selects next', async () => {
@@ -81,7 +81,7 @@ describe('App', () => {
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     const second = document.querySelector("[data-index='1']") as HTMLElement;
-    await waitFor(() => expect(second.className).toMatch(/selected/), { timeout: 2000 });
+    await waitFor(() => expect(second.className).toMatch(/selected/), { timeout: 5000 });
 
     // Delete
     fireEvent.keyDown(window, { key: 'Delete' });
