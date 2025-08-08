@@ -52,6 +52,17 @@ npm run tauri build           # Create desktop app bundle + DMG
 npm run build                 # Build web assets only
 ```
 
+### Release Process
+```bash
+# Version files that need updating for releases:
+# 1. package.json - "version" field
+# 2. src-tauri/Cargo.toml - "version" field  
+# 3. src-tauri/tauri.conf.json - "version" field (controls DMG naming)
+
+# Create release:
+git tag v0.x.x && git push origin v0.x.x    # Triggers GitHub Actions build
+```
+
 ### Single Test Execution
 ```bash
 # Frontend: Use Vitest filtering
