@@ -263,11 +263,9 @@ function App() {
                 key={it.path}
                 className={`card ${selectedItem ? "selected" : ""}`}
                 onClick={(e) => {
+                  setActiveIndex(idx);
                   if (e.detail === 2) {
-                    setActiveIndex(idx);
                     setLightboxOpen(true);
-                  } else {
-                    setActiveIndex(idx);
                   }
                 }}
                 title={it.path}
