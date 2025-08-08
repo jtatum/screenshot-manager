@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import React from 'react';
 import App from '../App';
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -94,7 +93,7 @@ describe('App', () => {
 
   it('undo error shows toast with Reveal', async () => {
     const seq: any[][] = [items, items];
-    invoke.mockImplementation(async (cmd: string, args?: any) => {
+    invoke.mockImplementation(async (cmd: string, _args?: any) => {
       if (cmd === 'list_screenshots') return seq.shift();
       if (cmd === 'delete_to_trash') return { trashed: [{ original_path: items[0].path, trashed_path: '/trash/A.png' }] };
       if (cmd === 'undo_last_delete') throw new Error('Permission denied');
