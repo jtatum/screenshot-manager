@@ -18,9 +18,10 @@ You need to add the following secrets to your GitHub repository (Settings → Se
   2. **Create Developer ID Certificate**:
      - Go to [Apple Developer Portal](https://developer.apple.com/account/resources/certificates/list)
      - Click "+" to create a new certificate
-     - Select "Developer ID Application" under "Distribution"
+     - Select "Developer ID Application" under "Distribution" (NOT "Apple Development")
      - Upload the CSR file you created
      - Download the certificate (.cer file)
+     - **Important**: Use "Developer ID Application" for apps distributed outside the Mac App Store
   3. **Export as .p12**:
      - Double-click the .cer file to import into Keychain Access
      - In Keychain Access, find your certificate under "My Certificates"
@@ -78,9 +79,17 @@ The following files have been configured for code signing:
 
 ## Troubleshooting
 
-- **Certificate not found**: Verify `APPLE_SIGNING_IDENTITY` matches exactly
+- **"failed to resolve signing identity"**: 
+  - Ensure you created a "Developer ID Application" certificate (not "Apple Development")
+  - Verify `APPLE_SIGNING_IDENTITY` matches exactly (format: "Developer ID Application: Your Name (TEAM_ID)")
+  - Check that the certificate was properly imported into the GitHub Actions keychain
+- **Certificate not found**: Verify `APPLE_SIGNING_IDENTITY` matches the certificate name exactly
 - **Notarization fails**: Ensure `APPLE_ID` and `APPLE_PASSWORD` are correct app-specific password
-- **Build fails**: Check that `APPLE_TEAM_ID` matches your developer account
+- **Build fails**: Check that `APPLE_TEAM_ID` matches your developer account (10-character string)
+
+## Certificate Types
+- **Apple Development**: For development/testing only, won't work for distribution
+- **Developer ID Application**: Required for apps distributed outside Mac App Store (use this one)
 
 ## Benefits of Code Signing
 
