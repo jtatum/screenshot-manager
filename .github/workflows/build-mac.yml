@@ -17,10 +17,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout (with Git LFS)
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
