@@ -1,6 +1,6 @@
 # Screenshot Manager
 
-[![CI](https://github.com/jtatum/ssmanager/actions/workflows/ci.yml/badge.svg)](https://github.com/jtatum/ssmanager/actions/workflows/ci.yml)
+[![CI](https://github.com/jtatum/screenshot-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/jtatum/screenshot-manager/actions/workflows/ci.yml)
 
 A tiny, fast Mac app for quickly managing screenshots on your desktop. View all your screenshots in one place and delete them instantly with mouse clicks or keyboard shortcuts.
 
