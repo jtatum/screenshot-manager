@@ -277,34 +277,36 @@ fn undo_last_delete(count: Option<usize>) -> tauri::Result<Vec<UndoEntry>> {
             } else {
                 to
             };
-            if from.exists() {
-                if let Err(e) = fs::rename(&from, &target) {
-                    if e.kind() == std::io::ErrorKind::PermissionDenied {
-                        return Err(anyhow::anyhow!(
-                            "Permission denied restoring from Trash. macOS requires Full Disk Access for this app to restore. Enable it in System Settings → Privacy & Security → Full Disk Access, or restore manually from Trash."
-                        ).into());
-                    }
-                    return Err(anyhow::anyhow!(e).into());
-                }
+            // Locate the trashed file: the recorded path, else a best-effort match in ~/.Trash.
+            let source = if from.exists() {
+                Some(from)
             } else {
-                // Fallback: try to locate the trashed file by name in ~/.Trash (best effort)
-                if let Some(trash_dir) = user_trash_dir() {
-                    if trash_dir.is_dir() {
-                        let candidate = best_trash_candidate(&trash_dir, &entry.file_name, Some(entry.deleted_at_ms));
-                        if let Some(found) = candidate {
-                            if found.exists() {
-                                if let Err(e) = fs::rename(&found, &target) {
-                                    if e.kind() == std::io::ErrorKind::PermissionDenied {
-                                        return Err(anyhow::anyhow!(
-                                            "Permission denied restoring from Trash. macOS requires Full Disk Access for this app to restore. Enable it in System Settings → Privacy & Security → Full Disk Access, or restore manually from Trash."
-                                        ).into());
-                                    }
-                                    return Err(anyhow::anyhow!(e).into());
-                                }
-                            }
-                        }
-                    }
+                user_trash_dir()
+                    .filter(|dir| dir.is_dir())
+                    .and_then(|dir| best_trash_candidate(&dir, &entry.file_name, Some(entry.deleted_at_ms)))
+                    .filter(|found| found.exists())
+            };
+            // On failure keep the entry on the stack so the user can retry (e.g. after
+            // granting Full Disk Access) instead of losing it.
+            let source = match source {
+                Some(source) => source,
+                None => {
+                    let message = format!(
+                        "Could not find \"{}\" in the Trash. If it is there, macOS may require Full Disk Access for this app to restore it; otherwise restore it manually.",
+                        entry.file_name
+                    );
+                    stack.push(entry);
+                    return Err(anyhow::anyhow!(message).into());
                 }
+            };
+            if let Err(e) = fs::rename(&source, &target) {
+                stack.push(entry);
+                if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    return Err(anyhow::anyhow!(
+                        "Permission denied restoring from Trash. macOS requires Full Disk Access for this app to restore. Enable it in System Settings → Privacy & Security → Full Disk Access, or restore manually from Trash."
+                    ).into());
+                }
+                return Err(anyhow::anyhow!(e).into());
             }
             restored.push(entry);
         }
@@ -404,6 +406,62 @@ mod tests {
         assert!(orig.exists());
         assert!(!trashed.exists());
         std::env::remove_var("SSM_TRASH_DIR");
+    }
+
+    #[test]
+    fn undo_failure_keeps_entry_for_retry() {
+        let _guard = TEST_ENV_LOCK.lock();
+        UNDO_STACK.lock().clear();
+        let trash_td = mk_tempdir();
+        let trashed = trash_td.join("Screenshot retry.png");
+        std::fs::write(&trashed, b"img").unwrap();
+        // The original folder no longer exists, so the rename fails.
+        let missing_dir = mk_tempdir().join("gone");
+        let orig = missing_dir.join("Screenshot retry.png");
+
+        UNDO_STACK.lock().push(UndoEntry {
+            original_path: orig.to_string_lossy().into_owned(),
+            trashed_path: trashed.to_string_lossy().into_owned(),
+            file_name: "Screenshot retry.png".to_string(),
+            deleted_at_ms: 0,
+        });
+        std::env::set_var("SSM_TRASH_DIR", &trash_td);
+        assert!(super::undo_last_delete(Some(1)).is_err());
+        assert_eq!(UNDO_STACK.lock().len(), 1, "failed undo must stay on the stack");
+
+        // Once the folder is back, retrying the undo succeeds.
+        std::fs::create_dir(&missing_dir).unwrap();
+        assert_eq!(super::undo_last_delete(Some(1)).unwrap().len(), 1);
+        assert!(orig.exists());
+        assert!(UNDO_STACK.lock().is_empty());
+        std::env::remove_var("SSM_TRASH_DIR");
+        let _ = std::fs::remove_dir_all(trash_td);
+    }
+
+    #[test]
+    fn undo_reports_error_when_trashed_file_is_missing() {
+        let _guard = TEST_ENV_LOCK.lock();
+        UNDO_STACK.lock().clear();
+        let td = mk_tempdir();
+        let empty_trash = mk_tempdir();
+        let orig = td.join("Screenshot vanished.png");
+
+        UNDO_STACK.lock().push(UndoEntry {
+            original_path: orig.to_string_lossy().into_owned(),
+            trashed_path: empty_trash.join("Screenshot vanished.png").to_string_lossy().into_owned(),
+            file_name: "Screenshot vanished.png".to_string(),
+            deleted_at_ms: 0,
+        });
+        std::env::set_var("SSM_TRASH_DIR", &empty_trash);
+        let res = super::undo_last_delete(Some(1));
+        std::env::remove_var("SSM_TRASH_DIR");
+
+        assert!(res.is_err(), "nothing was restored, so undo must not report success");
+        assert!(!orig.exists());
+        assert_eq!(UNDO_STACK.lock().len(), 1);
+        UNDO_STACK.lock().clear();
+        let _ = std::fs::remove_dir_all(td);
+        let _ = std::fs::remove_dir_all(empty_trash);
     }
 
     // NOTE: The "(restored)" collision path is exercised indirectly by logic,
