@@ -257,6 +257,32 @@ fn delete_to_trash(paths: Vec<String>) -> tauri::Result<TrashResult> {
     Ok(TrashResult { trashed: results })
 }
 
+// Pick a path to restore to without overwriting anything: the original path
+// if it is free, else "<stem> (restored).<ext>", "<stem> (restored 2).<ext>", ...
+// Builds the name directly instead of using set_extension, which would treat
+// the dots in macOS screenshot times ("at 1.23.45 AM") as an extension.
+fn restore_target(to: &std::path::Path) -> PathBuf {
+    if !to.exists() {
+        return to.to_path_buf();
+    }
+    let parent = to.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| PathBuf::from("."));
+    let stem = to.file_stem().and_then(|s| s.to_str()).unwrap_or("restored");
+    let ext = to.extension().and_then(|s| s.to_str());
+    let mut n = 1;
+    loop {
+        let suffix = if n == 1 { " (restored)".to_string() } else { format!(" (restored {})", n) };
+        let name = match ext {
+            Some(ext) => format!("{}{}.{}", stem, suffix, ext),
+            None => format!("{}{}", stem, suffix),
+        };
+        let candidate = parent.join(name);
+        if !candidate.exists() {
+            return candidate;
+        }
+        n += 1;
+    }
+}
+
 #[tauri::command]
 fn undo_last_delete(count: Option<usize>) -> tauri::Result<Vec<UndoEntry>> {
     let mut restored: Vec<UndoEntry> = Vec::new();
@@ -266,17 +292,7 @@ fn undo_last_delete(count: Option<usize>) -> tauri::Result<Vec<UndoEntry>> {
         if let Some(entry) = stack.pop() {
             let from = PathBuf::from(&entry.trashed_path);
             let to = PathBuf::from(&entry.original_path);
-            let target = if to.exists() {
-                // avoid overwriting: append " (restored)"
-                let parent = to.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| PathBuf::from("."));
-                let stem = to.file_stem().and_then(|s| s.to_str()).unwrap_or("restored");
-                let ext = to.extension().and_then(|s| s.to_str());
-                let mut candidate = parent.join(format!("{} (restored)", stem));
-                if let Some(ext) = ext { candidate.set_extension(ext); }
-                candidate
-            } else {
-                to
-            };
+            let target = restore_target(&to);
             if from.exists() {
                 if let Err(e) = fs::rename(&from, &target) {
                     if e.kind() == std::io::ErrorKind::PermissionDenied {
@@ -406,9 +422,57 @@ mod tests {
         std::env::remove_var("SSM_TRASH_DIR");
     }
 
-    // NOTE: The "(restored)" collision path is exercised indirectly by logic,
-    // but performing cross-device or sandboxed renames in this environment can be flaky,
-    // so we skip a direct filesystem assertion here.
+    #[test]
+    fn undo_restores_next_to_existing_original_without_mangling_name() {
+        let _guard = TEST_ENV_LOCK.lock();
+        let td = mk_tempdir();
+        let trash_td = mk_tempdir();
+        let name = "Screenshot 2025-01-01 at 1.23.45 AM.png";
+        let orig = td.join(name);
+        std::fs::write(&orig, b"new file at original path").unwrap();
+        let trashed = trash_td.join(name);
+        std::fs::write(&trashed, b"trashed").unwrap();
+
+        UNDO_STACK.lock().push(UndoEntry {
+            original_path: orig.to_string_lossy().into_owned(),
+            trashed_path: trashed.to_string_lossy().into_owned(),
+            file_name: name.to_string(),
+            deleted_at_ms: 0,
+        });
+        super::undo_last_delete(Some(1)).unwrap();
+
+        assert_eq!(std::fs::read(&orig).unwrap(), b"new file at original path");
+        let restored = td.join("Screenshot 2025-01-01 at 1.23.45 AM (restored).png");
+        assert_eq!(std::fs::read(&restored).unwrap(), b"trashed");
+        let _ = std::fs::remove_dir_all(td);
+        let _ = std::fs::remove_dir_all(trash_td);
+    }
+
+    #[test]
+    fn undo_never_overwrites_an_earlier_restored_copy() {
+        let _guard = TEST_ENV_LOCK.lock();
+        let td = mk_tempdir();
+        let trash_td = mk_tempdir();
+        let orig = td.join("Screenshot one.png");
+        std::fs::write(&orig, b"original").unwrap();
+        let earlier = td.join("Screenshot one (restored).png");
+        std::fs::write(&earlier, b"earlier restore").unwrap();
+        let trashed = trash_td.join("Screenshot one.png");
+        std::fs::write(&trashed, b"trashed").unwrap();
+
+        UNDO_STACK.lock().push(UndoEntry {
+            original_path: orig.to_string_lossy().into_owned(),
+            trashed_path: trashed.to_string_lossy().into_owned(),
+            file_name: "Screenshot one.png".to_string(),
+            deleted_at_ms: 0,
+        });
+        super::undo_last_delete(Some(1)).unwrap();
+
+        assert_eq!(std::fs::read(&earlier).unwrap(), b"earlier restore");
+        assert_eq!(std::fs::read(td.join("Screenshot one (restored 2).png")).unwrap(), b"trashed");
+        let _ = std::fs::remove_dir_all(td);
+        let _ = std::fs::remove_dir_all(trash_td);
+    }
 
     #[test]
     fn list_sort_by_name_and_size() {
